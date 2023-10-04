@@ -1,7 +1,4 @@
-
-
 class Eload:
-    #Carga Eletrônica
     def __init__(self):
         self.voltage = 0
         self.current = 0
@@ -66,7 +63,6 @@ class Eload:
 
 
 class PSU:
-    #Power Supply Unity (FONTE)
     def __init__(self):
         self.voltage = 0
         self._current = 1
@@ -86,7 +82,6 @@ class PSU:
 
 
 class Equity:
-    #???
     def __init__(self):
         self._temperature = 25
 
