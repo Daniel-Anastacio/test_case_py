@@ -1,161 +1,143 @@
-
-
-class Eload:
-    """A class that represents the eletronic load
-    """
-    def __init__(self):
-        """Initilazer function
-        """
-        self.voltage = 0
-        self.current = 0
-        self.power = self.voltage * self.current
-        self._buffer = None
-
-    def write(self, command):
-        """The function that send commands to Eload
-
-        Args:
-            command (str): Command to get or to set a parameter
-
-        Raises:
-            ValueError: Unknown command 
-        """
-        assert type(command) is str
-
-        if command.startswith('CURR'):
-            if command.endswith('?'):
-                self._buffer = self.current
-            else:
-                command_string = command.split(' ')
-                self.current = float(command_string[1])
-
-        elif command == 'MEAS:CURR?':
-            self._buffer = self.current
-
-        elif command.startswith('VOLT'):
-            if command.endswith('?'):
-                self._buffer = self.voltage
-            else:
-                command_string = command.split(' ')
-                self.voltage = float(command_string[1])
-
-        elif command == 'MEAS:VOLT?':
-            self._buffer = self.voltage
-
-        elif command == 'MEAS:POW?':
-           self._buffer = self.current * self.voltage
-
-        else:
-            raise ValueError('Not recognized command')
-
-    def read(self):
-        """The function that read a data in the buffer
-
-        Returns:
-            str: Data to read
-        """
-        buffer = str(self._buffer)
-        self._buffer = None
-
-        return buffer
-
-    def query(self, command):
-        """The function that query a attribute in a object Eload 
-
-        Args:
-            command (str): Command to get or to set a parameter
-
-        Raises:
-            ValueError: A unknown command
-
-        Returns:
-            str: A attribute consulted
-        """
-        assert type(command) is str
-
-        if command == 'CURR?':
-            return str(self.current)
-
-        elif command == 'MEAS:CURR?':
-            return str(self.current)
-
-        elif command == 'VOLT?':
-            return str(self.voltage)
-
-        elif command == 'MEAS:VOLT?':
-            return str(self.voltage)
-
-        elif command == 'MEAS:POW?':
-            return str(self.current * self.voltage)
-
-        else:
-            raise ValueError('Not recognized command')
-
-
-class PSU:
-    """A class that represents the power supply unity
-    """
+from instruments_academy import Eload, Equity, PSU
+from time import sleep
+class TestA:
     def __init__(self):
         """Initialazer function
         """
-        self.voltage = 0
-        self._current = 1
+        self._id = 1000,
+        self._name = 'Undervoltage academy',
+        self._description = 'Dont need'
+        self._fsm_state = "START"
+        self._fsm_sleep_time = 0.1
+        self._temperature_step = 0
+    def _fsm(self):
+        """Finite State Machine Function
 
-    def get_voltage(self):
-        """A function that get the voltage as attribute
-
-        Returns:
-            int: The voltage in PSU
+        Raises:
+            ValueError: Temperature out of security's range
+            ValueError: Stabilization's time out of security's range
+            ValueError: Current out of range
+            Exception: Invalid State 
         """
-        return self.voltage
+        if self._fsm_state == "START":
+            print(f'Actual state: {self._fsm_state}')
 
-    def set_voltage(self, voltage):
-        """A function that set the voltage as attribute
+            self.eload = Eload()
+            self.equity = Equity()
+            self.psu = PSU()
 
-        Args:
-            voltage (int): The value that will be assigned to the element voltage
+            self._config_eload()
+            self._config_equity()
+            self._config_psu()
+
+            self._temperature = [-10, 25, 85]
+            self._actual_temperature = self._temperature[self._temperature_step]
+            if not -20 <= self._actual_temperature <= 100:
+                raise ValueError('Temperature range error')
+
+            self._temperature_stabilization_time = 40
+            if not 0 <= self._temperature_stabilization_time <= 60:
+                raise ValueError('Temperature stabilization time range error') 
+
+            self._current = 0.0
+            assert type(self._current) is float
+            if not 0.0 <= self._current <= 10.0:
+                raise ValueError('Current range error')
+
+            self._initial_voltage = 10
+            self._final_voltage = 12
+            self._voltage_step = 0.5
+            self._psu_steps = 0
+
+
+            self._fsm_state = "CONFIG EQUITY"
+
+        elif self._fsm_state == "CONFIG ELOAD":
+            print(f'Actual state: {self._fsm_state}')
+            self.eload.write(f"CURR {self._current}")
+            sleep(1)
+
+            self._fsm_state = "CONFIG PSU"
+
+        elif self._fsm_state == "CONFIG EQUITY":
+            print(f'Actual state: {self._fsm_state}')
+            self.equity.set_temperature(self._actual_temperature)
+            while self._actual_temperature != self.equity.get_temperature():
+                sleep(1)
+            sleep(self._temperature_stabilization_time)
+            self._fsm_state = "CONFIG ELOAD"
+
+        elif self._fsm_state == "CONFIG PSU":
+            print(f'Actual state: {self._fsm_state}')
+            self.psu.set_voltage(self._initial_voltage)
+            sleep(1)
+            self._fsm_state = "SHOW OUTPUT"
+
+        elif self._fsm_state == "SHOW OUTPUT":
+            print(f'Actual state: {self._fsm_state}')
+            self._initial_voltage = self.psu.get_voltage()+self._voltage_step * self._psu_steps
+
+            print(f'Eload current: {self.eload.query("CURR?")}')
+            print(f'Eload voltage: {self.eload.query("VOLT?")}')
+            
+            print(f'PSU current: {self.psu.get_current()}')
+            print(f'PSU voltage: {self.psu.get_voltage()}')
+            
+            sleep(1)
+
+            self._psu_steps += 1 
+            if self._initial_voltage > self._final_voltage:
+                self._psu_steps = 0
+                self._initial_voltage = self.psu.get_voltage()+self._voltage_step * self._psu_steps
+                self._fsm_state = "VERIFY TEMPERATURE"
+            else:
+                self._fsm_state = "SHOW OUTPUT"
+        
+        elif self._fsm_state == "VERIFY TEMPERATURE":
+            print(f"Actual state: {self._fsm_state}")
+            self._temperature_step += 1
+            if not self._temperature_step >= len(self._temperature):
+                self._actual_temperature = self._temperature[self._temperature_step]
+                self._fsm_state = "CONFIG EQUITY"
+            else:
+                self._fsm_state = "END"
+
+        elif self._fsm_state == "END":
+            print(f'Actual state: {self._fsm_state}')
+            self.psu.set_voltage(0.0)
+            self.eload.write('CURR 0')
+            self.equity.set_temperature(25)
+
+            self._stop_flag = True
+
+        else:
+            exception_message = "FSM reached an invalid state"
+            raise Exception(exception_message)
+
+    def _config_eload(self):
+        """A function that configurates the eletronic load
         """
-        assert (type(voltage) is float) or (type(voltage) is int)
-        self.voltage = voltage
+        self.eload.write("CURR 0")
 
-    def get_current(self):
-        """A function that get the current as attribute
-
-        Returns:
-            int: The current in PSU
+    def _config_equity(self):
+        """A function that configurates the chamber temperature
         """
-        return self._current
+        self.equity.set_temperature(25)
 
-    def get_power(self):
-        """A function that calculates the power in PSU
-
-        Returns:
-            int: The power in PSU
+    def _config_psu(self):
+        """A function that configurates the PSU
         """
-        return self.voltage * self._current
+        self.psu.set_voltage(0)
 
-
-class Equity:
-    """A class that represents tha chamber temperature
-    """
-    def __init__(self):
-        """Initializer function
+    def _main(self):
+        """A function to manager execution flow
         """
-        self._temperature = 25
-
-    def get_temperature(self):
-        """A function to get the temperature in chamber
-
-        Returns:
-            int: The temperature in chamber temperature
-        """
-        return self._temperature
-
-    def set_temperature(self, temperature):
-        """A funtion to set a new tmeperature in chamber temperature
-
-        Args:
-            temperature (int): The temperature that will be able in chamber temperature
-        """
-        assert (type(temperature) is float) or (type(temperature) is int)
-        self._temperature = temperature
+        self._stop_flag = False
+        while self._stop_flag is False:
+            self._fsm()
+            sleep(self._fsm_sleep_time)
+        print('Test is done')
+    
+if __name__ == '__main__':
+    test = TestA()
+    test._main()
